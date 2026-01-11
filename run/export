@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# ===== CONFIG =====
+REMOTE_USER="johanes"
+REMOTE_HOST="192.168.1.10"
+REMOTE_DIR="/home/johanes/DATA/Project/TF-Mini-LM"
+PYTHON_BIN="python"
+PYTHON_SCRIPT="main.py"
+
+# ===== CREATE REMOTE DIRECTORIES =====
+ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
+mkdir -p ${REMOTE_DIR}
+mkdir -p ${REMOTE_DIR}/data
+mkdir -p ${REMOTE_DIR}/models
+EOF
+
+# ===== COPY DIRECTORIES =====
+# Copy current directory
+scp -r . ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/run
+
+# Copy ../data
+scp -r ../data ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
+
+# Copy ../models
+scp -r ../models ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
+
+# ===== RUN PYTHON SCRIPT =====
+ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
+cd ${REMOTE_DIR}
+${PYTHON_BIN} ${REMOTE_DIR}/run/${PYTHON_SCRIPT}
+EOF
