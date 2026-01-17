@@ -4,9 +4,11 @@ channels:
 dependencies:
   - python=3.10
   - pip
-
   - numpy
+  - scipy
   - pandas
+  - librosa
+  - soundfile
   - scikit-learn
   - matplotlib
 
