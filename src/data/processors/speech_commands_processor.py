@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +11,7 @@ import librosa
 
 # Import your loader (adjust import path to match your project)
 # from src.data.loaders.speech_commands_loader import build_speech_commands_index, SpeechCommandAudio
-from src.data.loaders.speech_commands_loader import build_speech_commands_index  # noqa
+# from src.data.loaders.speech_commands_loader import build_speech_commands_index  # noqa
 
 
 @dataclass(frozen=True)
