@@ -4,17 +4,21 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.datasets import mnist
 import tensorflow_datasets as tfds
+from tensorflow.keras.models import clone_model
 
 from models.tabular import mlp
+from models.tabular import mlp2
 from models.audio import cnn_ds
 from models.timeseries import cnn_1d
 
 from compression.quantization import quantize_model
 from src.compression.distilation import Distiller
 
+from data.loaders import human_activity_recognition, unsw
+
 SCENARIO = "timeseries"
-# DISTILLATION = True
-DISTILLATION = False
+DISTILLATION = True
+# DISTILLATION = False
 QUANTIZATION = True
 # QUANTIZATION = False
 
@@ -26,9 +30,7 @@ model = None
 
 if SCENARIO == "tabular":
 
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train = x_train.reshape(-1, 784).astype("float32") / 255.0
-    x_test = x_test.reshape(-1, 784).astype("float32") / 255.0
+    x_train, y_train, x_test, y_test = human_activity_recognition.load_data("data/uci-human-activity-recognition")
     model = mlp.build()
 
 elif SCENARIO == "audio":
@@ -40,10 +42,8 @@ elif SCENARIO == "audio":
 
 elif SCENARIO == "timeseries":
 
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train = x_train.reshape(-1, 784, 1).astype("float32") / 255.0
-    x_test = x_test.reshape(-1, 784, 1).astype("float32") / 255.0
-    model = cnn_1d.build()
+    x_train, y_train, x_test, y_test = unsw.load_data("data/UNSW-NB15")
+    model = mlp2.build(input_dim=x_train.shape[1], num_classes=6)
 
 
 # Compile the model
@@ -60,14 +60,14 @@ print(f"Test Accuracy: {test_acc:.4f}")
 
 
 if DISTILLATION:
-    teacher = mlp.build()
+    teacher = clone_model(model)
+    student = clone_model(model)
     teacher.compile(
         optimizer="adam",
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"]
     )
     teacher.fit(x_train, y_train, epochs=5, batch_size=64, validation_split=0.1)
-    student = mlp.build()
     distiller = Distiller(student, teacher, alpha=0.1, temperature=3.0)
     distiller.compile(
         optimizer="adam",

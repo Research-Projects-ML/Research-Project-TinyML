@@ -9,34 +9,14 @@ class Distiller(tf.keras.Model):
         self.temperature = temperature
         self.alpha = alpha
 
-    def compile(
-            self,
-            optimizer='rmsprop',
-            loss=None,
-            metrics=None,
-            loss_weights=None,
-            weighted_metrics=None,
-            run_eagerly=None,
-            steps_per_execution=None,
-            jit_compile=None,
-            # Our custom arguments must come after standard ones or via kwargs
-            **kwargs
-    ):
-        # Call super with all standard Keras arguments
+    def compile(self, optimizer="rmsprop", metrics=None, **kwargs):
+        self.student_loss_fn = kwargs.pop("student_loss_fn")
+        self.distill_loss_fn = kwargs.pop("distill_loss_fn")
+
         super().compile(
             optimizer=optimizer,
-            loss=loss,
             metrics=metrics,
-            loss_weights=loss_weights,
-            weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            steps_per_execution=steps_per_execution,
-            jit_compile=jit_compile
         )
-
-        # Pull your custom distillation losses from the keyword arguments
-        self.student_loss_fn = kwargs.get("student_loss_fn")
-        self.distill_loss_fn = kwargs.get("distill_loss_fn")
 
     def train_step(self, data):
         # ... logic from previous steps (update_state, etc.) ...
