@@ -19,10 +19,10 @@ EOF
 scp -r . ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/run
 
 # Copy ../data
-scp -r ../data ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
+scp -r ../../tflite/data ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
 
 # Copy ../models
-scp -r ../models ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
+scp -r ../../tflite/models ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}
 
 # ===== RUN PYTHON SCRIPT =====
 ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF

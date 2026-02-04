@@ -16,14 +16,14 @@ from src.compression.distilation import Distiller
 
 from data.loaders import human_activity_recognition, unsw
 
-from utils.plot_f1 import plot_f1
+from utils.plot_f1 import plot_metrics
 from utils.metrics import F1Metric
 
-SCENARIO = "timeseries"
+SCENARIO = "tabular"
 DISTILLATION = True
 # DISTILLATION = False
-QUANTIZATION = True
-# QUANTIZATION = False
+# QUANTIZATION = True
+QUANTIZATION = False
 
 x_train = None
 y_train = None
@@ -56,11 +56,11 @@ model.compile(
     metrics=['accuracy', F1Metric()]
 )
 # Train the model
-history = model.fit(x_train, y_train, epochs=5, batch_size=32, validation_split=0.2)
-plot_f1(history, "normal.png")
+history = model.fit(x_train, y_train, epochs=20, batch_size=32, validation_split=0.3)
+plot_metrics(history, SCENARIO + "_normal.png")
 
 test_loss, test_acc, f1 = model.evaluate(x_test, y_test)
-print(f"Test Accuracy: {test_acc:.4f}")
+print(f"Test Accuracy: {test_acc:.4f}, Loss: {test_loss:.4f}, F1: {f1:.4f}")
 
 
 if DISTILLATION:
@@ -71,10 +71,10 @@ if DISTILLATION:
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy", F1Metric()]
     )
-    history_teacher = teacher.fit(x_train, y_train, epochs=5, batch_size=64, validation_split=0.1)
+    history_teacher = teacher.fit(x_train, y_train, epochs=100, batch_size=64, validation_split=0.1)
     test_loss, test_acc, f1 = teacher.evaluate(x_test, y_test)
-    print(f"Test Accuracy: {test_acc:.4f}")
-    plot_f1(history_teacher, "teacher.png")
+    print(f"Test Accuracy: {test_acc:.4f}, Loss: {test_loss:.4f}, F1: {f1:.4f}")
+    plot_metrics(history_teacher, SCENARIO + "_teacher.png")
     distiller = Distiller(student, teacher, alpha=0.1, temperature=3.0)
     distiller.compile(
         optimizer="adam",
@@ -82,11 +82,11 @@ if DISTILLATION:
         student_loss_fn=tf.keras.losses.SparseCategoricalCrossentropy(),
         distill_loss_fn=tf.keras.losses.KLDivergence()
     )
-    distiller.fit(x_train, y_train, epochs=5, batch_size=64)
+    distiller.fit(x_train, y_train, epochs=100, batch_size=64)
     model = student
 
     test_loss, test_acc, f1 = model.evaluate(x_test, y_test)
-    print(f"Test Accuracy: {test_acc:.4f}")
+    print(f"Test Accuracy: {test_acc:.4f}, Loss: {test_loss:.4f}, F1: {f1:.4f}")
 
 
 converter = tf.lite.TFLiteConverter.from_keras_model(model)

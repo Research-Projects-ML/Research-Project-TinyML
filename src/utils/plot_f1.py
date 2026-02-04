@@ -1,22 +1,29 @@
 import os
-
 import matplotlib.pyplot as plt
 
-
-def plot_f1(history, filename):
-    if "f1" not in history.history:
+def plot_metrics(history, filename):
+    # Check keys
+    available_keys = list(history.history.keys())
+    if "f1" not in available_keys or "accuracy" not in available_keys:
         raise ValueError(
-            f"F1 metric not found. Available keys: {list(history.history.keys())}"
+            f"Required metrics not found. Available keys: {available_keys}"
         )
 
     save_path = os.path.join("plots", filename)
 
-    plt.figure()
-    plt.plot(history.history["f1"], label="Train F1")
-    plt.plot(history.history["val_f1"], label="Validation F1")
+    plt.figure(figsize=(8, 5))
+
+    # Plot Accuracy
+    plt.plot(history.history["accuracy"], label="Train Accuracy", linestyle='-')
+    plt.plot(history.history["val_accuracy"], label="Validation Accuracy", linestyle='-')
+
+    # # Plot F1
+    # plt.plot(history.history["f1"], label="Train F1", linestyle='--')
+    # plt.plot(history.history["val_f1"], label="Validation F1", linestyle='--')
+
     plt.xlabel("Epoch")
-    plt.ylabel("F1 Score")
-    plt.title("F1 Score During Training")
+    plt.ylabel("Score")
+    plt.title("Training Metrics During Training")
     plt.legend()
     plt.grid(True)
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
