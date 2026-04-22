@@ -1,0 +1,12 @@
+numpy>=1.26.0
+scipy
+pandas
+matplotlib
+seaborn
+scikit-learn
+pyyaml
+tqdm
+flatbuffers
+edgeimpulse
+tensorflow>=2.20.0
+tensorflow-datasets
