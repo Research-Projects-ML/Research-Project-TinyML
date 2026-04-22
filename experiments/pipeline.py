@@ -9,8 +9,8 @@ from compression.distillation  import apply_knowledge_distillation
 from compression.pruning       import apply_structured_pruning
 from compression.quantization  import apply_ptq, dequantize_to_float, requantize
 
-from datasets.image_loader      import load_image_data
-from datasets.timeseries_loader import load_timeseries_data
+from data_loaders.image_loader      import load_image_data
+from data_loaders.timeseries_loader import load_timeseries_data
 
 from models.image.resnet8  import get_teacher as get_image_teacher
 from models.image.resnet8  import get_student as get_image_student
