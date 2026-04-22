@@ -3,24 +3,12 @@ import tensorflow as tf
 
 
 def get_representative_dataset(calibration_dataset, num_samples=200):
-    count = 0
-    for inputs, _ in calibration_dataset:
-        inputs_np = inputs.numpy()
-        for i in range(len(inputs_np)):
-            if count >= num_samples:
-                return
-            sample = inputs_np[i:i+1]
-            yield [tf.cast(tf.constant(sample), tf.float32)]
-            count += 1
+    representative_data = calibration_dataset.unbatch().take(num_samples)
+    for sample, _ in representative_data:
+        yield [tf.expand_dims(tf.cast(sample, tf.float32), axis=0)]
 
 
 def apply_ptq(model, calibration_dataset, model_save_path):
-    sample_count = sum(1 for _ in get_representative_dataset(calibration_dataset, num_samples=200))
-    assert sample_count > 0, (
-        "Representative dataset generator yielded no samples. "
-        "Ensure calibration_dataset is a fresh tf.data slice that has not been exhausted."
-    )
-
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = lambda: get_representative_dataset(
