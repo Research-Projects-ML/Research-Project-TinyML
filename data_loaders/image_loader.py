@@ -1,45 +1,30 @@
+import numpy as np
 import tensorflow as tf
-import tensorflow_datasets as tfds
-
-def _cutout(image, mask_size=16):
-    h, w = 32, 32
-    half = mask_size // 2
-
-    cx = tf.random.uniform(shape=[], minval=0, maxval=w, dtype=tf.int32)
-    cy = tf.random.uniform(shape=[], minval=0, maxval=h, dtype=tf.int32)
-    x1 = tf.maximum(0,  cx - half)
-    x2 = tf.minimum(w,  cx + half)
-    y1 = tf.maximum(0,  cy - half)
-    y2 = tf.minimum(h,  cy + half)
-
-    mask = tf.ones([h, w, 1], dtype=tf.float32)
-    patch_h = y2 - y1
-    patch_w = x2 - x1
-    zero_patch = tf.zeros([patch_h, patch_w, 1], dtype=tf.float32)
-    paddings = [[y1, h - y2], [x1, w - x2], [0, 0]]
-    zero_padded = tf.pad(zero_patch, paddings, constant_values=1.0)
-
-    mask = mask * zero_padded
-    return image * mask
+from tensorflow import keras
 
 
 def load_image_data(config, seed):
     batch_size = config['batch_size']
 
-    ds_train_full = tfds.load('cifar10', split='train', as_supervised=True, shuffle_files=True)
-    ds_test       = tfds.load('cifar10', split='test',  as_supervised=True)
+    (x_train_full, y_train_full), (x_test, y_test) = keras.datasets.cifar10.load_data()
 
-    num_train_total = 50000
+    x_train_full = x_train_full.astype('float32') / 255.0
+    x_test       = x_test.astype('float32') / 255.0
+    y_train_full = y_train_full.squeeze().astype('int32')
+    y_test       = y_test.squeeze().astype('int32')
+
+    num_train_total = len(x_train_full)
     num_val         = 5000
     num_train       = num_train_total - num_val
 
-    ds_train_full = ds_train_full.shuffle(buffer_size=num_train_total, seed=seed, reshuffle_each_iteration=False)
-    ds_train_raw  = ds_train_full.take(num_train)
-    ds_val_raw    = ds_train_full.skip(num_train)
+    rng             = np.random.default_rng(seed)
+    shuffle_indices = rng.permutation(num_train_total)
 
-    def normalise(image, label):
-        image = tf.cast(image, tf.float32) / 255.0
-        return image, label
+    x_train_full = x_train_full[shuffle_indices]
+    y_train_full = y_train_full[shuffle_indices]
+
+    x_train, y_train = x_train_full[:num_train], y_train_full[:num_train]
+    x_val,   y_val   = x_train_full[num_train:], y_train_full[num_train:]
 
     def augment(image, label):
         image = tf.image.random_flip_left_right(image)
@@ -51,24 +36,21 @@ def load_image_data(config, seed):
         return image, label
 
     train_dataset = (
-        ds_train_raw
-        .map(normalise, num_parallel_calls=tf.data.AUTOTUNE)
-        .map(augment,   num_parallel_calls=tf.data.AUTOTUNE)
+        tf.data.Dataset.from_tensor_slices((x_train, y_train))
         .shuffle(buffer_size=num_train, seed=seed)
+        .map(augment, num_parallel_calls=tf.data.AUTOTUNE)
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
     )
 
     val_dataset = (
-        ds_val_raw
-        .map(normalise, num_parallel_calls=tf.data.AUTOTUNE)
+        tf.data.Dataset.from_tensor_slices((x_val, y_val))
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
     )
 
     test_dataset = (
-        ds_test
-        .map(normalise, num_parallel_calls=tf.data.AUTOTUNE)
+        tf.data.Dataset.from_tensor_slices((x_test, y_test))
         .batch(batch_size)
         .prefetch(tf.data.AUTOTUNE)
     )
