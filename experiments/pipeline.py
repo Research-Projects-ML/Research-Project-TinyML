@@ -9,15 +9,15 @@ from compression.distillation  import apply_knowledge_distillation
 from compression.pruning       import apply_structured_pruning
 from compression.quantization  import apply_ptq, dequantize_to_float, requantize
 
-from data_loaders.image_loader      import load_image_data
-from data_loaders.timeseries_loader import load_timeseries_data
+from datasets.image_loader      import load_image_data
+from datasets.timeseries_loader import load_timeseries_data
 
 from models.image.resnet8  import get_teacher as get_image_teacher
 from models.image.resnet8  import get_student as get_image_student
 from models.timeseries.tcn import get_teacher as get_ts_teacher
 from models.timeseries.tcn import get_student as get_ts_student
 
-from evaluation.model_metrics    import (
+from evaluation.model_metrics import (
     evaluate_keras_model,
     evaluate_tflite_model,
     compute_accuracy_drop,
@@ -25,7 +25,7 @@ from evaluation.model_metrics    import (
     serialize_history,
 )
 from evaluation.hardware_metrics import (
-    profile_tflite_with_ei,
+    profile_tflite,
     assess_deployability,
     compute_pareto_frontier,
 )
@@ -146,7 +146,7 @@ def _apply_stage(
     pipeline_name,
     stage_idx,
 ):
-    stage_label  = f"{pipeline_name}_stage{stage_idx}_{stage}"
+    stage_label   = f"{pipeline_name}_stage{stage_idx}_{stage}"
     stage_history = None
 
     if stage == 'P':
@@ -300,25 +300,25 @@ def run_pipeline(
     l1_sensitivity = compute_l1_sensitivity(current_model, domain)
 
     print("  [EI] Profiling on hardware targets...")
-    hardware_profile = profile_tflite_with_ei(tflite_path, hardware_config)
+    hardware_profile = profile_tflite(tflite_path)
 
     print("  [Eval] Assessing deployability...")
     deployability = assess_deployability(hardware_profile, hardware_config)
 
     result = {
-        'pipeline':          pipeline_name,
-        'domain':            domain,
-        'seed':              seed,
-        'stages':            stages,
-        'float_metrics':     float_metrics,
-        'tflite_metrics':    tflite_metrics,
-        'float_drop':        float_drop,
-        'tflite_drop':       tflite_drop,
-        'l1_sensitivity':    l1_sensitivity,
-        'hardware_profile':  hardware_profile,
-        'deployability':     deployability,
-        'tflite_size_kb':    round(os.path.getsize(tflite_path) / 1024, 3),
-        'stage_histories':   all_stage_histories,
+        'pipeline':        pipeline_name,
+        'domain':          domain,
+        'seed':            seed,
+        'stages':          stages,
+        'float_metrics':   float_metrics,
+        'tflite_metrics':  tflite_metrics,
+        'float_drop':      float_drop,
+        'tflite_drop':     tflite_drop,
+        'l1_sensitivity':  l1_sensitivity,
+        'hardware_profile': hardware_profile,
+        'deployability':   deployability,
+        'tflite_size_kb':  round(os.path.getsize(tflite_path) / 1024, 3),
+        'stage_histories': all_stage_histories,
     }
 
     print(f"\n  [Summary]")
@@ -385,7 +385,7 @@ def run_all_pipelines(
             all_results.append(result)
 
     print(f"\n[Analysis] Computing Pareto frontier across all pipelines...")
-    pareto = compute_pareto_frontier(all_results)
+    pareto      = compute_pareto_frontier(all_results)
     pareto_path = os.path.join(eval_dir, 'pareto_frontier.json')
     with open(pareto_path, 'w') as f:
         json.dump(pareto, f, indent=2)
