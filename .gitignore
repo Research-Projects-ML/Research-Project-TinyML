@@ -75,6 +75,17 @@ docs/_build/
 .pybuilder/
 target/
 
+# data
+data/
+
+# results
+results/*
+results/eval_results/*
+results/pipeline_results/*
+results/sweep_results/*
+results/teachers/*
+results/plots/*
+
 # Jupyter Notebook
 .ipynb_checkpoints
 

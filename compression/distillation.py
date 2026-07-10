@@ -1,64 +1,56 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow import keras
-
+import keras
+from experiments.utils import get_steps_per_epoch
 
 def kd_loss(teacher_logits, student_logits, true_labels, temperature, alpha):
     """
+    Reference: Distilling the Knowledge in a Neural Network (Hinton et al., 2015)
     Combines two objectives:
-    1. Soft target loss: KL divergence between teacher and student softened probability distributions. 
+    1. Soft target loss: KL divergence between teacher and student softened probability distributions.
     2. Hard target loss: standard cross-entropy between student predictions and ground truth labels.
-
-    The combined loss is:
-        L = alpha * L_soft + (1 - alpha) * L_hard
-
-    Hinton et al. (2015)
+    The combined loss is: L = alpha * L_soft + (1 - alpha) * L_hard
     """
     teacher_soft = tf.nn.softmax(teacher_logits / temperature, axis=-1)
     student_soft = tf.nn.log_softmax(student_logits / temperature, axis=-1)
 
-    # KL divergence: sum(teacher_soft * log(teacher_soft / student_soft))
-    # Equivalent to: -sum(teacher_soft * student_log_soft) + constant
-    soft_loss = -tf.reduce_mean(
-        tf.reduce_sum(teacher_soft * student_soft, axis=-1)
-    ) * (temperature ** 2)  # Scale by T^2 to restore gradient magnitude
-
-    # Hard targets: standard cross-entropy with ground truth
-    hard_loss = tf.reduce_mean(
-        tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=true_labels,
-            logits=student_logits
-        )
-    )
+    # KL divergence sum(teacher_soft * log(teacher_soft / student_soft)) Equivalent to -sum(teacher_soft * student_log_soft) + constant
+    # Scale by T^2 to restore gradient magnitude
+    soft_loss = -tf.reduce_mean(tf.reduce_sum(teacher_soft * student_soft, axis=-1)) * (temperature ** 2) 
+    # Hard targets standard cross-entropy with ground truth
+    hard_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=true_labels,logits=student_logits))
 
     return alpha * soft_loss + (1 - alpha) * hard_loss
 
 
 class KnowledgeDistillationTrainer:
-    def __init__(self, teacher, student, config, num_classes):
-        self.teacher     = teacher
-        self.student     = student
-        self.temperature = config['kd_temperature']
-        self.alpha       = config['kd_alpha']
-        self.num_classes = num_classes
-        self.epochs      = config['kd_epochs']
-        self.patience    = config.get('kd_patience', 10)
 
-        # Freeze teacher = no gradient updates ever
+    def __init__(self, teacher, student, config, num_classes, train_dataset):
+        self.teacher = teacher
+        self.student = student
+        self.temperature = config['kd_temperature']
+        self.alpha = config['kd_alpha']
+        self.num_classes = num_classes
+        self.epochs = config['kd_epochs']
+        self.patience = config.get('kd_patience', 10)
         self.teacher.trainable = False
+        self.steps_per_epoch = get_steps_per_epoch(train_dataset)
+
+        initial_lr = config.get('kd_lr_post_pruning', config['kd_learning_rate'])
 
         lr_schedule = keras.optimizers.schedules.CosineDecay(
-            initial_learning_rate=config['kd_learning_rate'],
-            decay_steps=config['kd_epochs']
+            initial_learning_rate = initial_lr,
+            decay_steps = self.epochs * self.steps_per_epoch,
+            alpha=1e-6 
         )
         self.optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
 
     def _train_step(self, images, labels):
-        # Teacher forward pass = inference mode, no gradient tracking
+        # Teacher forward pass
         teacher_logits = self.teacher(images, training=False)
 
         with tf.GradientTape() as tape:
-            # Student forward pass = training mode
+            # Student forward pass
             student_logits = self.student(images, training=True)
             loss = kd_loss(
                 teacher_logits=teacher_logits,
@@ -73,72 +65,74 @@ class KnowledgeDistillationTrainer:
         self.optimizer.apply_gradients(
             zip(gradients, self.student.trainable_variables)
         )
-        return loss
+
+        return loss, student_logits
 
     def _evaluate(self, val_dataset):
         total_correct = 0
         total_samples = 0
-        total_loss    = 0.0
-        num_batches   = 0
+        total_loss = 0.0
+        num_batches = 0
 
         for images, labels in val_dataset:
             teacher_logits = self.teacher(images, training=False)
-            # Accuracy using hard predictions (argmax of student logits)
             student_logits = self.student(images, training=False)
-
-            loss = kd_loss(
-                teacher_logits=teacher_logits,
-                student_logits=student_logits,
-                true_labels=labels,
-                temperature=self.temperature,
-                alpha=self.alpha
-            )
-
+            loss = kd_loss(teacher_logits=teacher_logits,student_logits=student_logits,true_labels=labels,temperature=self.temperature,alpha=self.alpha)
             predictions = tf.argmax(student_logits, axis=-1, output_type=tf.int32)
-            total_correct += tf.reduce_sum(
-                tf.cast(tf.equal(predictions, tf.cast(labels, tf.int32)), tf.int32)
-            ).numpy()
+            total_correct += tf.reduce_sum(tf.cast(tf.equal(predictions, tf.cast(labels, tf.int32)), tf.int32)).numpy()
             total_samples += len(labels)
-            total_loss    += loss.numpy()
-            num_batches   += 1
+            total_loss += loss.numpy()
+            num_batches += 1
 
         return total_loss / num_batches, total_correct / total_samples
 
     def train(self, train_dataset, val_dataset):
         history = {
             'train_loss': [],
-            'val_loss':   [],
+            'train_accuracy': [],
+            'val_loss': [],
             'val_accuracy': []
         }
 
-        best_val_acc     = -np.inf
-        best_weights     = None
+        best_val_acc = -np.inf
+        best_weights = None
         patience_counter = 0
 
         for epoch in range(self.epochs):
-            # Training
-            train_losses = []
+            train_losses  = []
+            train_correct = 0
+            train_samples = 0
+
             for images, labels in train_dataset:
-                loss = self._train_step(images, labels)
+                # Single forward pass
+                loss, student_logits = self._train_step(images, labels)
                 train_losses.append(loss.numpy())
 
-            epoch_train_loss              = np.mean(train_losses)
+                predictions = tf.argmax(student_logits, axis=-1, output_type=tf.int32)
+                train_correct += tf.reduce_sum(
+                    tf.cast(tf.equal(predictions, tf.cast(labels, tf.int32)), tf.int32)
+                ).numpy()
+                train_samples += len(labels)
+
+            epoch_train_loss = np.mean(train_losses)
+            epoch_train_acc = train_correct / train_samples
+
             epoch_val_loss, epoch_val_acc = self._evaluate(val_dataset)
 
-            history['train_loss'].append(epoch_train_loss)
-            history['val_loss'].append(epoch_val_loss)
-            history['val_accuracy'].append(epoch_val_acc)
+            history['train_loss'].append(float(epoch_train_loss))
+            history['train_accuracy'].append(float(epoch_train_acc))
+            history['val_loss'].append(float(epoch_val_loss))
+            history['val_accuracy'].append(float(epoch_val_acc))
 
             print(
                 f"Epoch {epoch+1}/{self.epochs} | "
-                f"Train Loss: {epoch_train_loss:.4f} | "
-                f"Val Loss: {epoch_val_loss:.4f} | "
-                f"Val Acc: {epoch_val_acc:.4f}"
+                f"Train Loss: {epoch_train_loss:.4f} | Train Acc: {epoch_train_acc:.4f} | "
+                f"Val Loss: {epoch_val_loss:.4f} | Val Acc: {epoch_val_acc:.4f}"
             )
 
             if epoch_val_acc > best_val_acc:
-                best_val_acc     = epoch_val_acc
-                best_weights     = self.student.get_weights()
+                best_val_acc = epoch_val_acc
+                best_weights = self.student.get_weights()
                 patience_counter = 0
             else:
                 patience_counter += 1
@@ -147,15 +141,13 @@ class KnowledgeDistillationTrainer:
                 print(f"Early stopping at epoch {epoch+1}. Best val acc: {best_val_acc:.4f}")
                 break
 
+        if best_weights is None:
+            raise RuntimeError("[KD] best_weights is None no epoch completed successfully. Check that train_dataset is non-empty and the model produces valid outputs.")
+
         self.student.set_weights(best_weights)
         return self.student, history
 
 
 def apply_knowledge_distillation(teacher, student, config, train_dataset, val_dataset, num_classes):
-    trainer = KnowledgeDistillationTrainer(
-        teacher=teacher,
-        student=student,
-        config=config,
-        num_classes=num_classes
-    )
+    trainer = KnowledgeDistillationTrainer(teacher=teacher,student=student,config=config,num_classes=num_classes,train_dataset=train_dataset)
     return trainer.train(train_dataset, val_dataset)

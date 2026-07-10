@@ -1,0 +1,112 @@
+#include <cstdio>
+#include <cstring>
+
+#include "system_setup.h"
+#include "micro_time.h"
+#include "model_data.h"
+
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "tensorflow/lite/micro/micro_log.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+#include "op_resolver.h"
+
+constexpr int kArenaSize = 64 * 1024;
+static uint8_t tensor_arena[kArenaSize];
+constexpr int kNumRuns = 100;
+
+#ifndef PIPELINE_NAME
+#define PIPELINE_NAME "unknown"
+#endif
+
+int main() {
+    system_setup();
+    timing_init();
+
+    printf("BOOT\r\n");
+
+    // Step 1: load model
+    const tflite::Model* model = tflite::GetModel(g_model_data);
+    if (model == nullptr) {
+        printf("ERROR: model is null\r\n");
+        return 1;
+    }
+    printf("DBG: model loaded\r\n");
+
+    if (model->version() != TFLITE_SCHEMA_VERSION) {
+        printf("ERROR: schema mismatch %d vs %d\r\n",
+               (int)model->version(), (int)TFLITE_SCHEMA_VERSION);
+        return 1;
+    }
+    printf("DBG: schema ok\r\n");
+
+    // Step 2: op resolver
+    tflite::MicroMutableOpResolver<14> resolver;
+    populate_op_resolver(resolver);
+    printf("DBG: resolver ready\r\n");
+
+    // Step 3: interpreter
+    tflite::MicroInterpreter interpreter(
+        model, resolver, tensor_arena, kArenaSize
+    );
+    printf("DBG: interpreter created\r\n");
+
+    // Step 4: AllocateTensors
+    printf("DBG: calling AllocateTensors...\r\n");
+    TfLiteStatus alloc_status = interpreter.AllocateTensors();
+    if (alloc_status != kTfLiteOk) {
+        printf("ERROR: AllocateTensors failed status=%d\r\n", (int)alloc_status);
+        return 1;
+    }
+    printf("DBG: AllocateTensors ok\r\n");
+
+    size_t arena_used = interpreter.arena_used_bytes();
+    printf("DBG: arena_used=%u bytes\r\n", (unsigned int)arena_used);
+
+    // Step 5: prepare input
+    TfLiteTensor* input = interpreter.input(0);
+    if (input == nullptr) {
+        printf("ERROR: input tensor is null\r\n");
+        return 1;
+    }
+    printf("DBG: input bytes=%u\r\n", (unsigned int)input->bytes);
+    memset(input->data.raw, 0, input->bytes);
+
+    // Step 6: warmup
+    printf("DBG: warmup invoke...\r\n");
+    TfLiteStatus warmup_status = interpreter.Invoke();
+    if (warmup_status != kTfLiteOk) {
+        printf("ERROR: warmup Invoke failed status=%d\r\n", (int)warmup_status);
+        return 1;
+    }
+    printf("DBG: warmup ok\r\n");
+
+    // Step 7: timed loop
+    printf("DBG: starting timed loop...\r\n");
+    uint32_t t_start = timing_get_cycles();
+    for (int i = 0; i < kNumRuns; i++) {
+        TfLiteStatus s = interpreter.Invoke();
+        if (s != kTfLiteOk) {
+            printf("ERROR: Invoke failed at run %d\r\n", i);
+            return 1;
+        }
+        // Print every 10 runs so we know it's alive
+        if ((i + 1) % 10 == 0) {
+            printf("COUNT: %d\r\n", i + 1);
+        }
+    }
+    uint32_t t_end = timing_get_cycles();
+
+    uint32_t avg_cycles = (t_end - t_start) / kNumRuns;
+    float    avg_ms     = timing_cycles_to_ms(avg_cycles);
+
+    printf("RESULT,%s,%lu,%.3f,%u\r\n",
+           PIPELINE_NAME,
+           (unsigned long)avg_cycles,
+           avg_ms,
+           (unsigned int)arena_used);
+
+    printf("DONE\r\n");
+
+    while (1) {}
+}

@@ -7,13 +7,13 @@ import tensorflow as tf
 UCI_HAR_URL = (
     'https://d396qusza40orc.cloudfront.net/getdata/projectfiles/UCI%20HAR%20Dataset.zip'
 )
+
 # 6 activity classes: WALKING, WALKING_UPSTAIRS, WALKING_DOWNSTAIRS, SITTING, STANDING, LAYING
 NUM_CLASSES = 6
+
 # Input shape: 128 timesteps, 9 sensor channels (accelerometer XYZ + gyroscope XYZ + body acc XYZ)
-TIMESTEPS       = 128
-INPUT_CHANNELS  = 9
-
-
+TIMESTEPS = 128
+INPUT_CHANNELS = 9
 
 def _download_and_extract(data_dir):
     extract_path = os.path.join(data_dir, 'UCI HAR Dataset')
@@ -31,15 +31,14 @@ def _download_and_extract(data_dir):
     with zipfile.ZipFile(zip_path, 'r') as zf:
         zf.extractall(data_dir)
     os.remove(zip_path)
-    print(f"[UCI HAR Dataset] is ready ... {extract_path}")
+    print(f"UCI HAR Dataset is ready ... {extract_path}")
     return extract_path
-
 
 def _load_signals(data_path, split):
     signal_names = [
-        'body_acc_x', 'body_acc_y', 'body_acc_z',
-        'body_gyro_x', 'body_gyro_y', 'body_gyro_z',
-        'total_acc_x', 'total_acc_y', 'total_acc_z'
+        'body_acc_x','body_acc_y','body_acc_z',
+        'body_gyro_x','body_gyro_y','body_gyro_z',
+        'total_acc_x','total_acc_y','total_acc_z'
     ]
     signals = []
     signals_path = os.path.join(data_path, split, 'Inertial Signals')
@@ -53,25 +52,22 @@ def _load_signals(data_path, split):
     signals = np.stack(signals, axis=-1).astype(np.float32)
     return signals
 
-
 def _load_labels(data_path, split):
     label_path = os.path.join(data_path, split, f'y_{split}.txt')
     labels = np.loadtxt(label_path, dtype=np.int32)
     labels = labels - 1
     return labels
 
-
 def _normalise_signals(train_signals, val_signals, test_signals):
     mean = train_signals.mean(axis=(0, 1), keepdims=True)  # (1, 1, 9)
-    std  = train_signals.std(axis=(0, 1),  keepdims=True)  # (1, 1, 9)
-    std  = np.where(std == 0, 1.0, std)  # avoid division by zero
+    std  = train_signals.std(axis=(0, 1), keepdims=True)  # (1, 1, 9)
+    std  = np.where(std == 0, 1.0, std)
 
     train_signals = (train_signals - mean) / std
-    val_signals   = (val_signals   - mean) / std
-    test_signals  = (test_signals  - mean) / std
+    val_signals = (val_signals - mean) / std
+    test_signals = (test_signals - mean) / std
 
     return train_signals, val_signals, test_signals
-
 
 def load_timeseries_data(config, seed):
     batch_size = config['batch_size']
@@ -83,10 +79,10 @@ def load_timeseries_data(config, seed):
 
     data_path = _download_and_extract(data_dir)
 
-    train_signals = _load_signals(data_path, 'train')  # (7352, 128, 9)
-    train_labels  = _load_labels(data_path, 'train')   # (7352,)
-    test_signals  = _load_signals(data_path, 'test')   # (2947, 128, 9)
-    test_labels   = _load_labels(data_path, 'test')    # (2947,)
+    train_signals = _load_signals(data_path, 'train') # (7352, 128, 9)
+    train_labels = _load_labels(data_path, 'train') # (7352,)
+    test_signals = _load_signals(data_path, 'test') # (2947, 128, 9)
+    test_labels = _load_labels(data_path, 'test') # (2947,)
 
     SPLIT_SEED = 42  # fixed
 
@@ -106,9 +102,7 @@ def load_timeseries_data(config, seed):
     train_signals = train_signals[:num_train]
     train_labels = train_labels[:num_train]
 
-    train_signals, val_signals, test_signals = _normalise_signals(
-        train_signals, val_signals, test_signals
-    )
+    train_signals, val_signals, test_signals = _normalise_signals(train_signals, val_signals, test_signals)
 
     def make_dataset(signals, labels, shuffle, batch_size, seed):
         ds = tf.data.Dataset.from_tensor_slices((signals, labels))

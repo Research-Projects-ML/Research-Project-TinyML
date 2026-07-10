@@ -1,26 +1,18 @@
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
+import keras
+from keras import layers
 
 
 def residual_block(x, out_filters, stride, block_name):
     in_filters = x.shape[-1]  # channels-last
 
     # First conv
-    out = layers.Conv2D(
-        out_filters, kernel_size=3,
-        strides=stride, padding='same',
-        use_bias=False, name=f'{block_name}_conv1'
-    )(x)
+    out = layers.Conv2D(out_filters, kernel_size=3, strides=stride, padding='same', use_bias=False, name=f'{block_name}_conv1')(x)
     out = layers.BatchNormalization(name=f'{block_name}_bn1')(out)
     out = layers.ReLU(name=f'{block_name}_relu1')(out)
 
     # Second conv
-    out = layers.Conv2D(
-        out_filters, kernel_size=3,
-        strides=1, padding='same',
-        use_bias=False, name=f'{block_name}_conv2'
-    )(out)
+    out = layers.Conv2D(out_filters, kernel_size=3, strides=1, padding='same', use_bias=False, name=f'{block_name}_conv2')(out)
     out = layers.BatchNormalization(name=f'{block_name}_bn2')(out)
 
     # Shortcut projection if shape changes
@@ -51,10 +43,10 @@ def build_resnet8(num_classes, base_filters, model_name, dropout_rate=0.0):
     x = residual_block(x, base_filters, stride=1, block_name='stage1')
 
     # Stage 2: double channels, stride-2 downsampling
-    x = residual_block(x, base_filters * 2, stride=2, block_name='stage2')
+    x = residual_block(x, base_filters*2, stride=2, block_name='stage2')
 
     # Stage 3: double channels again, stride-2 downsampling
-    x = residual_block(x, base_filters * 4, stride=2, block_name='stage3')
+    x = residual_block(x, base_filters*4, stride=2, block_name='stage3')
 
     x = layers.GlobalAveragePooling2D(name='gap')(x)
     if dropout_rate > 0.0:
@@ -65,18 +57,8 @@ def build_resnet8(num_classes, base_filters, model_name, dropout_rate=0.0):
 
 
 def get_teacher(config):
-    return build_resnet8(
-        num_classes=config['num_classes'],
-        base_filters=config['teacher_base_filters'],
-        model_name='resnet8_teacher',
-        dropout_rate=0.3        
-    )
+    return build_resnet8(num_classes=config['num_classes'],base_filters=config['teacher_base_filters'],model_name='resnet8_teacher',dropout_rate=0.3)
 
 
 def get_student(config):
-    return build_resnet8(
-        num_classes=config['num_classes'],
-        base_filters=config['student_base_filters'],
-        model_name='resnet8_student',
-        dropout_rate=0.0
-    )
+    return build_resnet8(num_classes=config['num_classes'],base_filters=config['student_base_filters'],model_name='resnet8_student',dropout_rate=0.0)
